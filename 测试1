@@ -1,22 +1,168 @@
--- 简易聊天发送器
-local TextChatService = game:GetService("TextChatService")
+-- NPC范围脚本
+-- 自动查找 workspace 下所有名称包含 "Jogo_M_" 的 NPC
+-- 并修改其 HumanoidRootPart 的大小和颜色
 
--- 等待聊天系统加载完成
-local textChannels = TextChatService:WaitForChild("TextChannels")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
 
--- 获取所有可用的聊天频道
-local channels = textChannels:GetChildren()
+-- 配置参数（你可以修改这些数值）
+local CONFIG = {
+    Range = 20,        -- 范围大小（数字越大攻击范围越大）
+    Transparency = 0.8, -- 透明度（0=完全可见，1=完全透明）
+    Red = 255,         -- 红色 (0-255)
+    Green = 0,         -- 绿色 (0-255)
+    Blue = 255,        -- 蓝色 (0-255)
+    Material = "Neon"  -- 材质: Neon, Plastic, ForceField 等
+}
 
--- 发送消息到每个频道（除了系统频道）
-for _, channel in ipairs(channels) do
-    if channel.Name ~= "RBXSystem" then
-        channel:SendAsync("臭猫爸爸")
+-- 创建GUI界面（参考你的样式）
+local ScreenGui = Instance.new("ScreenGui")
+local MainFrame = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local RangeBox = Instance.new("TextBox")
+local ExecuteBtn = Instance.new("TextButton")
+local CloseBtn = Instance.new("TextButton")
+
+ScreenGui.Name = "NPC_Range_Gui"
+ScreenGui.Parent = game.CoreGui
+
+MainFrame.Name = "Main"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+MainFrame.Position = UDim2.new(0.5, -150, 0.3, 0)
+MainFrame.Size = UDim2.new(0, 300, 0, 200)
+MainFrame.Active = true
+MainFrame.Draggable = true
+
+Title.Name = "Title"
+Title.Parent = MainFrame
+Title.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+Title.Position = UDim2.new(0, 0, -0.15, 0)
+Title.Size = UDim2.new(0, 300, 0, 40)
+Title.Font = Enum.Font.SourceSans
+Title.Text = "NPC范围执行器"
+Title.TextColor3 = Color3.fromRGB(0, 0, 0)
+Title.TextScaled = true
+
+RangeBox.Name = "RangeBox"
+RangeBox.Parent = MainFrame
+RangeBox.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+RangeBox.Position = UDim2.new(0.1, 0, 0.25, 0)
+RangeBox.Size = UDim2.new(0, 100, 0, 40)
+RangeBox.Font = Enum.Font.SourceSans
+RangeBox.PlaceholderText = "范围大小"
+RangeBox.Text = tostring(CONFIG.Range)
+RangeBox.TextColor3 = Color3.fromRGB(0, 0, 0)
+RangeBox.TextScaled = true
+
+ExecuteBtn.Name = "Execute"
+ExecuteBtn.Parent = MainFrame
+ExecuteBtn.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+ExecuteBtn.Position = UDim2.new(0.55, 0, 0.25, 0)
+ExecuteBtn.Size = UDim2.new(0, 100, 0, 40)
+ExecuteBtn.Font = Enum.Font.SourceSans
+ExecuteBtn.Text = "执行"
+ExecuteBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+ExecuteBtn.TextScaled = true
+
+CloseBtn.Name = "Close"
+CloseBtn.Parent = MainFrame
+CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+CloseBtn.Position = UDim2.new(0.9, 0, -0.12, 0)
+CloseBtn.Size = UDim2.new(0, 50, 0, 30)
+CloseBtn.Font = Enum.Font.SourceSans
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+CloseBtn.TextScaled = true
+
+-- 查找所有NPC的函数
+local function findAllNPCs()
+    local npcs = {}
+    
+    -- 遍历workspace下所有子孙对象
+    local function search(container)
+        for _, child in ipairs(container:GetChildren()) do
+            -- 检查名称是否包含 "Jogo_M_"
+            if string.find(child.Name, "Jogo_M_") then
+                table.insert(npcs, child)
+            end
+            -- 递归搜索子对象
+            if child:IsA("Model") or child:IsA("Folder") then
+                search(child)
+            end
+        end
     end
+    
+    search(workspace)
+    return npcs
 end
 
--- 发送完成提示
-game:GetService("StarterGui"):SetCore("SendNotification", {
-    Title = "完成",
-    Text = "消息已发送",
-    Duration = 2
-})
+-- 执行范围修改
+local currentConnection = nil
+
+local function applyRange(rangeValue)
+    -- 断开之前的连接
+    if currentConnection then
+        currentConnection:Disconnect()
+    end
+    
+    -- 启动新的循环
+    currentConnection = RunService.RenderStepped:Connect(function()
+        local npcs = findAllNPCs()
+        
+        for _, npc in ipairs(npcs) do
+            -- 查找NPC的HumanoidRootPart或主要部件
+            local rootPart = npc:FindFirstChild("HumanoidRootPart")
+            
+            -- 如果没有HumanoidRootPart，尝试找Humanoid然后找RootPart
+            if not rootPart then
+                local humanoid = npc:FindFirstChild("Humanoid")
+                if humanoid and humanoid.RootPart then
+                    rootPart = humanoid.RootPart
+                end
+            end
+            
+            -- 如果还没有，尝试找名称包含"Torso"或"UpperTorso"的部件
+            if not rootPart then
+                for _, part in ipairs(npc:GetChildren()) do
+                    if part:IsA("BasePart") and (string.find(part.Name, "Torso") or string.find(part.Name, "Root")) then
+                        rootPart = part
+                        break
+                    end
+                end
+            end
+            
+            -- 修改找到的部件
+            if rootPart and rootPart:IsA("BasePart") then
+                rootPart.Size = Vector3.new(rangeValue, rangeValue, rangeValue)
+                rootPart.Transparency = CONFIG.Transparency
+                rootPart.Color = Color3.fromRGB(CONFIG.Red, CONFIG.Green, CONFIG.Blue)
+                rootPart.Material = CONFIG.Material
+                rootPart.CanCollide = false
+            end
+        end
+    end)
+end
+
+-- 按钮功能
+ExecuteBtn.MouseButton1Click:Connect(function()
+    local newRange = tonumber(RangeBox.Text)
+    if newRange and newRange > 0 then
+        CONFIG.Range = newRange
+        applyRange(CONFIG.Range)
+    end
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui.Enabled = false
+    if currentConnection then
+        currentConnection:Disconnect()
+        currentConnection = nil
+    end
+end)
+
+-- 启动时自动执行默认范围
+applyRange(CONFIG.Range)
+
+print("NPC范围脚本已加载！查找所有名称包含 Jogo_M_ 的NPC")
